@@ -1,0 +1,44 @@
+{
+  "name": "codex-v1-subagents",
+  "version": "0.3.0",
+  "description": "Restore interactive legacy full-task tabs for Codex desktop subagents on Windows.",
+  "license": "MIT",
+  "type": "commonjs",
+  "bin": {
+    "codex-v1-subagents": "bin/cli.cjs"
+  },
+  "files": [
+    "bin",
+    "scripts",
+    "launch.ps1",
+    "runtime-patch.cjs",
+    "README.md",
+    "LICENSE",
+    "SECURITY.md"
+  ],
+  "scripts": {
+    "test": "node --test runtime-patch.test.cjs",
+    "check": "node --check runtime-patch.cjs && node --check bin/cli.cjs",
+    "prepublishOnly": "npm run check && npm test"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "os": [
+    "win32"
+  ],
+  "keywords": [
+    "codex",
+    "codex-desktop",
+    "subagents",
+    "windows"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Alien-AV/codex-v1-subagents.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Alien-AV/codex-v1-subagents/issues"
+  },
+  "homepage": "https://github.com/Alien-AV/codex-v1-subagents#readme"
+}
