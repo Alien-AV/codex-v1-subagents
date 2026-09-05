@@ -32,11 +32,13 @@ jobs:
           $version = node -p "require('./package.json').version"
           npm view "$name@$version" version --json *> $null
           $alreadyPublished = $LASTEXITCODE -eq 0
-          "publish=$(-not $alreadyPublished)" >> $env:GITHUB_OUTPUT
-          "Package: $name@$version; publish: $(-not $alreadyPublished)"
-      - if: steps.package.outputs.publish == 'True'
+          $shouldPublish = if ($alreadyPublished) { "false" } else { "true" }
+          "publish=$shouldPublish" >> $env:GITHUB_OUTPUT
+          "Package: $name@$version; publish: $shouldPublish"
+          exit 0
+      - if: steps.package.outputs.publish == 'true'
         run: npm run check
-      - if: steps.package.outputs.publish == 'True'
+      - if: steps.package.outputs.publish == 'true'
         run: npm test
-      - if: steps.package.outputs.publish == 'True'
+      - if: steps.package.outputs.publish == 'true'
         run: npm publish --provenance --access public
