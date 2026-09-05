@@ -1,7 +1,14 @@
 name: Publish npm release
 
 on:
+  push:
+    branches:
+      - main
   workflow_dispatch:
+
+concurrency:
+  group: npm-publish
+  cancel-in-progress: false
 
 permissions:
   contents: read
@@ -17,6 +24,19 @@ jobs:
           node-version: 24
           registry-url: https://registry.npmjs.org
           package-manager-cache: false
-      - run: npm run check
-      - run: npm test
-      - run: npm publish
+      - name: Check whether this version is already published
+        id: package
+        shell: pwsh
+        run: |
+          $name = node -p "require('./package.json').name"
+          $version = node -p "require('./package.json').version"
+          npm view "$name@$version" version --json *> $null
+          $alreadyPublished = $LASTEXITCODE -eq 0
+          "publish=$(-not $alreadyPublished)" >> $env:GITHUB_OUTPUT
+          "Package: $name@$version; publish: $(-not $alreadyPublished)"
+      - if: steps.package.outputs.publish == 'True'
+        run: npm run check
+      - if: steps.package.outputs.publish == 'True'
+        run: npm test
+      - if: steps.package.outputs.publish == 'True'
+        run: npm publish --provenance --access public
