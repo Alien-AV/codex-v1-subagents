@@ -1,6 +1,6 @@
 {
   "name": "codex-v1-subagents",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "description": "Restore interactive legacy full-task tabs for Codex desktop subagents on Windows.",
   "license": "MIT",
   "type": "commonjs",
@@ -11,6 +11,7 @@
     "bin",
     "scripts",
     "launch.ps1",
+    "catalog-override.cjs",
     "runtime-patch.cjs",
     "README.md",
     "LICENSE",
@@ -18,7 +19,7 @@
   ],
   "scripts": {
     "test": "node --test runtime-patch.test.cjs",
-    "check": "node --check runtime-patch.cjs && node --check bin/cli.cjs",
+    "check": "node --check runtime-patch.cjs && node --check catalog-override.cjs && node --check bin/cli.cjs",
     "prepublishOnly": "npm run check && npm test"
   },
   "engines": {

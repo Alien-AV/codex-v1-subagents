@@ -1,4 +1,3 @@
-app.asar.*
 runtime-patch.log
 node_modules/
 *.tgz

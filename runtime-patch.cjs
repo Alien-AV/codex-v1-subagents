@@ -3,6 +3,7 @@
 const { spawn } = require('node:child_process');
 const fs = require('node:fs');
 const path = require('node:path');
+const { prepareCatalogOverride } = require('./catalog-override.cjs');
 
 const PATCH_TIMEOUT_MS = 90_000;
 const IDENTIFIER = '[$A-Z_a-z][$\\w]*';
@@ -149,10 +150,13 @@ function patchForUrl(url) {
 async function main() {
   const executable = process.argv[2];
   const logPath = process.argv[3] || path.join(__dirname, 'runtime-patch.log');
+  const codexCli = process.argv[4];
   if (!executable)
-    throw new Error('Usage: node runtime-patch.cjs <ChatGPT.exe> [log-file]');
+    throw new Error('Usage: node runtime-patch.cjs <ChatGPT.exe> [log-file] <codex.exe>');
   if (!fs.existsSync(executable))
     throw new Error(`Codex executable not found: ${executable}`);
+  if (!codexCli)
+    throw new Error('The bundled Codex CLI path is required');
 
   const packageVersion = packageVersionFromExecutable(executable);
   fs.writeFileSync(logPath, '', 'utf8');
@@ -162,9 +166,23 @@ async function main() {
     process.stdout.write(`${line}\n`);
   };
 
+  const catalogOverride = prepareCatalogOverride(codexCli, log);
+  let overrideCleaned = false;
+  const cleanupOverride = () => {
+    if (overrideCleaned)
+      return;
+    try {
+      catalogOverride.cleanup();
+      overrideCleaned = true;
+    } catch (error) {
+      log(`Launch override cleanup failed: ${error.message}`);
+    }
+  };
+  process.once('exit', cleanupOverride);
   log(`Launching Codex ${packageVersion || '(unknown version)'} with private CDP pipe`);
   const child = spawn(executable, ['--remote-debugging-pipe'], {
     detached: false,
+    env: catalogOverride.environment,
     windowsHide: false,
     stdio: ['ignore', 'ignore', 'pipe', 'pipe', 'pipe'],
   });
@@ -342,10 +360,12 @@ async function main() {
   child.once('error', error => {
     fatalError = error;
     cdp.close(error);
+    cleanupOverride();
   });
 
   const childExit = new Promise((resolve, reject) => {
     child.once('exit', (code, signal) => {
+      cleanupOverride();
       if (!primaryPatched && !fatalError)
         fatalError = new Error(`Codex exited before patching (code ${code}, signal ${signal || 'none'})`);
       if (fatalError)
@@ -371,11 +391,13 @@ async function main() {
     const { targetInfos = [] } = await cdp.send('Target.getTargets');
     await Promise.all(targetInfos.map(attachTarget));
     await Promise.race([success, childExit]);
+    catalogOverride.restoreConfig();
     log('PATCH ACTIVE: subagents now open as interactive legacy task tabs. Keep this launcher running.');
     await childExit;
   } catch (error) {
     fatalError = error;
     log(`PATCH FAILED: ${error.stack || error}`);
+    cleanupOverride();
     if (!child.killed)
       child.kill();
     throw error;

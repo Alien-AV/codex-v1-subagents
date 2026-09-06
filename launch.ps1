@@ -16,6 +16,12 @@ if (-not $package) {
     throw 'The OpenAI.Codex Windows package is not installed.'
 }
 $codexExe = Join-Path $package.InstallLocation 'app\ChatGPT.exe'
+$codexCli = Get-ChildItem -LiteralPath (Join-Path $env:LOCALAPPDATA 'OpenAI\Codex\bin') -Filter 'codex.exe' -File -Recurse -ErrorAction SilentlyContinue |
+    Sort-Object LastWriteTime -Descending |
+    Select-Object -ExpandProperty FullName -First 1
+if (-not $codexCli) {
+    throw 'The Codex CLI runtime was not found. Launch normal Codex once, let it finish loading, quit it, and retry.'
+}
 $runtimePatch = Join-Path $PSScriptRoot 'runtime-patch.cjs'
 $logFile = if ($LogFile) { $LogFile } else { Join-Path $PSScriptRoot 'runtime-patch.log' }
 $pathNode = Get-Command node -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source -First 1
@@ -32,7 +38,7 @@ if (-not $resolvedNode) {
 Write-Host 'Launching Codex with the v1 interactive-subagent runtime patch...'
 Write-Host 'Keep this PowerShell window open while using Codex.'
 Write-Host "Log: $logFile"
-& $resolvedNode $runtimePatch $codexExe $logFile
+& $resolvedNode $runtimePatch $codexExe $logFile $codexCli
 if ($LASTEXITCODE -ne 0) {
     throw "The runtime patch failed. See $logFile"
 }

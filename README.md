@@ -1,7 +1,9 @@
 # Codex v1 Subagents
 
 Windows-only runtime patch for Codex desktop that opens subagents as interactive
-legacy full-task tabs instead of the non-interactive side panel.
+legacy full-task tabs instead of the non-interactive side panel. It also makes
+new tasks use the V1 subagent runtime without leaving a persistent Codex
+configuration change.
 
 ## One-off run
 
@@ -79,21 +81,44 @@ response time, validates their semantic structure, rewrites them in memory, and
 then lets Chromium evaluate them.
 Existing renderers are reloaded once through the same interceptor.
 
+For the backend, the launcher copies Codex's current full model catalog to a
+unique launch directory under `%LOCALAPPDATA%\CodexV1Subagents\runtime` and
+changes only catalog entries whose `multi_agent_version` is `v2` to `v1`.
+
+During startup it transactionally adds or replaces these `config.toml` values:
+
+```toml
+model_catalog_json = "<generated V1 catalog>"
+
+[features]
+multi_agent = true
+multi_agent_v2 = false
+```
+
+Once Codex is ready, the launcher removes only its changes and preserves
+unrelated settings that Codex updated during startup. The original config is
+checksummed and backed up beside it for crash recovery. The generated catalog
+is validated before use and deleted when Codex exits.
+
 No debugging TCP port is opened and nothing under `WindowsApps` is modified.
 Quitting Codex discards the patch.
+
+The catalog choice is persisted in task history. New tasks created under this
+launcher use V1; existing tasks that were already created as V2 remain V2.
 
 ## Development
 
 ```powershell
 node --check runtime-patch.cjs
+node --check catalog-override.cjs
 node --check bin/cli.cjs
 node --test runtime-patch.test.cjs
 ```
 
 ## Compatibility
 
-- Tested with OpenAI.Codex `26.825.6671.0`, `26.901.4073.0`, and
-  `26.901.5003.0`.
+- Tested with OpenAI.Codex `26.825.6671.0`, `26.901.4073.0`,
+  `26.901.5003.0`, and `26.901.6511.0`.
 
 The launcher discovers hash-named renderer chunks and checks the exact UI
 structure it changes. Harmless package and chunk-hash updates therefore work
