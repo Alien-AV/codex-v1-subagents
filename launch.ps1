@@ -40,5 +40,12 @@ Write-Host 'Keep this PowerShell window open while using Codex.'
 Write-Host "Log: $logFile"
 & $resolvedNode $runtimePatch $codexExe $logFile $codexCli
 if ($LASTEXITCODE -ne 0) {
-    throw "The runtime patch failed. See $logFile"
+    $failureLine = Get-Content -LiteralPath $logFile -ErrorAction SilentlyContinue |
+        Where-Object { $_ -match ' PATCH FAILED: ' } |
+        Select-Object -Last 1
+    if ($failureLine) {
+        $message = $failureLine -replace '^.* PATCH FAILED: ', ''
+        throw "Codex v1 Subagents: $message See $logFile"
+    }
+    throw "Codex v1 Subagents could not start, but no detailed failure was recorded. See $logFile"
 }

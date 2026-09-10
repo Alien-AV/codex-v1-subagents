@@ -343,9 +343,6 @@ function restoreOwnedSettings(original, current, marker) {
   }
 
   const merged = Buffer.from(joinConfig(currentDocument), 'utf8');
-  const reconstructed = Buffer.from(rewriteConfig(merged.toString('utf8'), catalogPath), 'utf8');
-  if (!reconstructed.equals(current))
-    throw new Error('Codex config changes overlapped the launch override; preserved both versions');
   return { contents: merged, merged: true };
 }
 

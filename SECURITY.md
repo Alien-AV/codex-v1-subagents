@@ -15,9 +15,9 @@ During startup only, the launcher transactionally modifies `config.toml` and
 restores the original bytes as soon as Codex is ready. The adjacent backup and
 transaction marker are checksummed; if the config changes unexpectedly, the
 launcher removes only its three settings and preserves non-overlapping Codex
-changes. It verifies that reapplying the override reconstructs the observed
-file exactly. Overlapping or ambiguous edits preserve both versions and fail
-closed.
+changes. Each temporary setting must still have the exact value written by the
+launcher before it can be removed. Overlapping or ambiguous edits preserve both
+versions and fail closed.
 
 Do not weaken the structural source-signature checks when updating support for a
 new Codex release. Review changed renderer behavior and update tests first.

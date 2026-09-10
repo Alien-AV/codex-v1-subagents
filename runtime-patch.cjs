@@ -7,6 +7,28 @@ const { prepareCatalogOverride } = require('./catalog-override.cjs');
 
 const PATCH_TIMEOUT_MS = 90_000;
 const IDENTIFIER = '[$A-Z_a-z][$\\w]*';
+const TESTED_CODEX_VERSIONS = Object.freeze([
+  '26.825.6671.0',
+  '26.901.4073.0',
+  '26.901.5003.0',
+  '26.901.6511.0',
+  '26.903.8094.0',
+]);
+const HOOK_BASELINE_VERSION = TESTED_CODEX_VERSIONS.at(-1);
+
+class PatchFailure extends Error {
+  constructor(message, cause) {
+    super(message);
+    this.name = 'PatchFailure';
+    this.cause = cause;
+  }
+}
+
+function hookFailure(installedVersion, detail) {
+  return new PatchFailure(
+    `Couldn't hook the Codex UI (version expected ${HOOK_BASELINE_VERSION}, got ${installedVersion || 'unknown'}): ${detail}`,
+  );
+}
 
 const PATCHES = Object.freeze({
   legacyThreadRoute: Object.freeze({
@@ -36,7 +58,7 @@ function applyPatch(source, patch) {
   if (matches.length === 0)
     return { source, changed: false };
   if (matches.length !== 1)
-    throw new Error(`${patch.displayName}: expected at most one structural signature; found ${matches.length}`);
+    throw new Error(`${patch.displayName}: expected exactly 1 structural match, got ${matches.length}`);
 
   const replacement = patch.replacement(matches[0].groups);
   return {
@@ -166,8 +188,26 @@ async function main() {
     process.stdout.write(`${line}\n`);
   };
 
-  const catalogOverride = prepareCatalogOverride(codexCli, log);
+  if (TESTED_CODEX_VERSIONS.includes(packageVersion))
+    log(`Compatibility: Codex ${packageVersion} is a tested version`);
+  else
+    log(`VERSION WARNING: hook baseline expected ${HOOK_BASELINE_VERSION}, got ${packageVersion || 'unknown'}; attempting structural compatibility checks`);
+
+  let catalogOverride;
+  try {
+    catalogOverride = prepareCatalogOverride(codexCli, log);
+  } catch (error) {
+    const failure = new PatchFailure(
+      `Couldn't prepare the V1 model catalog for Codex ${packageVersion || 'unknown'}: ${error.message}`,
+      error,
+    );
+    log(`PATCH FAILED: ${failure.message}`);
+    if (error.stack)
+      log(`DETAILS: ${error.stack}`);
+    throw failure;
+  }
   let overrideCleaned = false;
+  let cleanupFailureLogged = false;
   const cleanupOverride = () => {
     if (overrideCleaned)
       return;
@@ -175,7 +215,10 @@ async function main() {
       catalogOverride.cleanup();
       overrideCleaned = true;
     } catch (error) {
-      log(`Launch override cleanup failed: ${error.message}`);
+      if (!cleanupFailureLogged) {
+        cleanupFailureLogged = true;
+        log(`Could not restore the temporary config override automatically: ${error.message}`);
+      }
     }
   };
   process.once('exit', cleanupOverride);
@@ -200,6 +243,7 @@ async function main() {
   const attachingTargets = new Set();
   const preparingSessions = new Map();
   const pendingRequests = new Set();
+  const candidateCounts = new Map(Object.keys(PATCHES).map(name => [name, 0]));
   let primaryPatched = false;
   let fatalError;
   let resolveSuccess;
@@ -209,15 +253,25 @@ async function main() {
     resolveSuccess = resolve;
     rejectSuccess = reject;
   });
-  const timer = setTimeout(() => rejectSuccess(new Error('Timed out waiting for both renderer chunks to pass through interception.')), PATCH_TIMEOUT_MS);
+  const timer = setTimeout(() => {
+    const bestSession = [...sessions.values()].sort((left, right) => right.patches.size - left.patches.size)[0];
+    const installed = bestSession?.patches || new Set();
+    const missing = Object.entries(PATCHES)
+      .filter(([name]) => !installed.has(name))
+      .map(([name, patch]) => `${patch.displayName}: saw ${candidateCounts.get(name)} candidate response(s), installed 0 hooks`)
+      .join('; ');
+    abortPatch(hookFailure(packageVersion, `timed out after ${PATCH_TIMEOUT_MS / 1000}s; ${missing || 'the two hooks never appeared in one renderer'}`));
+  }, PATCH_TIMEOUT_MS);
   timer.unref();
 
   function abortPatch(error) {
     if (fatalError)
       return;
-    fatalError = error;
+    fatalError = error instanceof PatchFailure
+      ? error
+      : hookFailure(packageVersion, error.message || String(error));
     clearTimeout(timer);
-    rejectSuccess(error);
+    rejectSuccess(fatalError);
     if (primaryPatched && !child.killed)
       child.kill();
   }
@@ -229,7 +283,7 @@ async function main() {
       return;
     }
     if (message.params.responseStatusCode == null)
-      throw new Error(`${matched[1].fileName}: interception occurred before the response was available`);
+      throw new Error(`${matched[1].displayName}: expected a completed script response, got an incomplete request`);
 
     const requestKey = `${message.sessionId}:${message.params.requestId}`;
     if (pendingRequests.has(requestKey))
@@ -238,6 +292,7 @@ async function main() {
 
     try {
       const [patchName, patch] = matched;
+      candidateCounts.set(patchName, candidateCounts.get(patchName) + 1);
       const response = await cdp.send('Fetch.getResponseBody', { requestId: message.params.requestId }, message.sessionId);
       const source = response.base64Encoded
         ? Buffer.from(response.body, 'base64').toString('utf8')
@@ -258,7 +313,7 @@ async function main() {
       await cdp.send('Fetch.fulfillRequest', fulfill, message.sessionId);
 
       if (!replacement.changed) {
-        log(`${patch.displayName}: candidate ${message.params.request.url} did not contain the structural signature; passed through`);
+        log(`${patch.displayName}: expected 1 structural match, got 0 in ${message.params.request.url}; waiting for another candidate`);
         return;
       }
 
@@ -267,7 +322,7 @@ async function main() {
         return;
       const previousUrl = session.patchUrls.get(patchName);
       if (previousUrl && previousUrl !== message.params.request.url)
-        throw new Error(`${patch.displayName}: structural signature also appeared in ${message.params.request.url}`);
+        throw new Error(`${patch.displayName}: expected 1 matching script, got matches in both ${previousUrl} and ${message.params.request.url}`);
       session.patchUrls.set(patchName, message.params.request.url);
       session.patches.add(patchName);
       log(`${patch.displayName}: response rewritten in target ${session.targetId}`);
@@ -358,8 +413,8 @@ async function main() {
   }
 
   child.once('error', error => {
-    fatalError = error;
-    cdp.close(error);
+    fatalError = new PatchFailure(`Couldn't launch Codex ${packageVersion || 'unknown'}: ${error.message}`, error);
+    cdp.close(fatalError);
     cleanupOverride();
   });
 
@@ -367,7 +422,10 @@ async function main() {
     child.once('exit', (code, signal) => {
       cleanupOverride();
       if (!primaryPatched && !fatalError)
-        fatalError = new Error(`Codex exited before patching (code ${code}, signal ${signal || 'none'})`);
+        fatalError = hookFailure(
+          packageVersion,
+          `Codex exited before both hooks were installed (exit code ${code}, signal ${signal || 'none'})`,
+        );
       if (fatalError)
         reject(fatalError);
       else
@@ -375,6 +433,7 @@ async function main() {
     });
   });
 
+  let phase = 'hooking the renderer';
   try {
     const targetFilter = [
       { type: 'page' },
@@ -391,16 +450,30 @@ async function main() {
     const { targetInfos = [] } = await cdp.send('Target.getTargets');
     await Promise.all(targetInfos.map(attachTarget));
     await Promise.race([success, childExit]);
-    catalogOverride.restoreConfig();
+    phase = 'restoring the Codex config';
+    try {
+      catalogOverride.restoreConfig();
+    } catch (error) {
+      throw new PatchFailure(`Couldn't restore config.toml after installing the UI hooks: ${error.message}`, error);
+    }
+    phase = 'running Codex';
     log('PATCH ACTIVE: subagents now open as interactive legacy task tabs. Keep this launcher running.');
     await childExit;
   } catch (error) {
-    fatalError = error;
-    log(`PATCH FAILED: ${error.stack || error}`);
+    const failure = error instanceof PatchFailure
+      ? error
+      : phase === 'hooking the renderer'
+        ? hookFailure(packageVersion, error.message || String(error))
+        : new PatchFailure(`Codex patch failed while ${phase}: ${error.message || error}`, error);
+    fatalError = failure;
+    log(`PATCH FAILED: ${failure.message}`);
+    const details = failure.cause?.stack || (error !== failure && error.stack);
+    if (details)
+      log(`DETAILS: ${details}`);
     cleanupOverride();
     if (!child.killed)
       child.kill();
-    throw error;
+    throw failure;
   }
 }
 
@@ -413,6 +486,9 @@ if (require.main === module) {
 module.exports = {
   applyPatch,
   CdpPipe,
+  hookFailure,
+  HOOK_BASELINE_VERSION,
+  PatchFailure,
   PATCHES,
   packageVersionFromExecutable,
   patchForUrl,

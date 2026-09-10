@@ -16,6 +16,8 @@ const {
 const {
   applyPatch,
   CdpPipe,
+  hookFailure,
+  HOOK_BASELINE_VERSION,
   PATCHES,
   packageVersionFromExecutable,
   patchForUrl,
@@ -229,7 +231,14 @@ test('irrelevant candidate chunks are skipped and ambiguous signatures fail clos
   const patch = PATCHES.interactiveSubagent;
   assert.deepEqual(applyPatch('export{value as x}', patch), { source: 'export{value as x}', changed: false });
   const signature = 'props:{canInteract:n.canInteract,conversationId:n.conversationId';
-  assert.throws(() => applyPatch(`${signature}${signature}`, patch), /found 2/);
+  assert.throws(() => applyPatch(`${signature}${signature}`, patch), /expected exactly 1 structural match, got 2/);
+});
+
+test('hook errors report expected and installed Codex versions', () => {
+  const error = hookFailure('26.999.1.0', 'expected 1 renderer match, got 0');
+  assert.match(error.message, /Couldn't hook the Codex UI/);
+  assert.match(error.message, new RegExp(`version expected ${HOOK_BASELINE_VERSION.replaceAll('.', '\\.')}.*got 26\\.999\\.1\\.0`));
+  assert.match(error.message, /expected 1 renderer match, got 0/);
 });
 
 test('CDP pipe frames requests and resolves split NUL-delimited responses', async () => {

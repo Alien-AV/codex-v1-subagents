@@ -41,6 +41,8 @@ shortcut runs that pinned local copy without contacting npm.
 
 Startup failures appear in a dialog and are written to
 `%LOCALAPPDATA%\CodexV1Subagents\runtime-patch.log`.
+Compatibility errors report the installed Codex version, the latest tested
+version, and the hook whose expected structure did not match.
 
 The official Codex shortcut and installed package remain untouched.
 
@@ -118,7 +120,7 @@ node --test runtime-patch.test.cjs
 ## Compatibility
 
 - Tested with OpenAI.Codex `26.825.6671.0`, `26.901.4073.0`,
-  `26.901.5003.0`, and `26.901.6511.0`.
+  `26.901.5003.0`, `26.901.6511.0`, and `26.903.8094.0`.
 
 The launcher discovers hash-named renderer chunks and checks the exact UI
 structure it changes. Harmless package and chunk-hash updates therefore work
