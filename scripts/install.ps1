@@ -29,6 +29,8 @@ Copy-Item -LiteralPath (Join-Path $PackageRoot 'runtime-patch.cjs') -Destination
 Copy-Item -LiteralPath (Join-Path $PackageRoot 'catalog-override.cjs') -Destination $installRoot -Force
 Copy-Item -LiteralPath (Join-Path $PackageRoot 'launch.ps1') -Destination $installRoot -Force
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'uninstall.ps1') -Destination $installRoot -Force
+$iconPath = Join-Path $installRoot 'codex-v1-subagents.ico'
+Copy-Item -LiteralPath (Join-Path $PackageRoot 'assets\codex-v1-subagents.ico') -Destination $iconPath -Force
 
 $launchScript = Join-Path $installRoot 'launch.ps1'
 $logFile = Join-Path $installRoot 'runtime-patch.log'
@@ -73,7 +75,6 @@ End If
 "@
 Set-Content -LiteralPath $hiddenLauncher -Value $vbs -Encoding ascii
 
-$codexExe = Join-Path $package.InstallLocation 'app\ChatGPT.exe'
 $shortcutName = 'Codex - v1 Subagents.lnk'
 $shortcutPaths = @(
     (Join-Path ([Environment]::GetFolderPath('DesktopDirectory')) $shortcutName),
@@ -86,7 +87,7 @@ foreach ($shortcutPath in $shortcutPaths) {
     $shortcut.TargetPath = $wscript
     $shortcut.Arguments = '"{0}"' -f $hiddenLauncher
     $shortcut.WorkingDirectory = $installRoot
-    $shortcut.IconLocation = "$codexExe,0"
+    $shortcut.IconLocation = "$iconPath,0"
     $shortcut.Description = 'Launch Codex with interactive legacy subagent task tabs'
     $shortcut.Save()
 }

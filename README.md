@@ -1,5 +1,7 @@
 # Codex v1 Subagents
 
+<img src="assets/icon.png" alt="Codex v1 Subagents icon" width="160">
+
 Windows-only runtime patch for Codex desktop that opens subagents as interactive
 legacy full-task tabs instead of the non-interactive side panel. It also makes
 new tasks use the V1 subagent runtime without leaving a persistent Codex
@@ -38,6 +40,8 @@ Or, from a downloaded/cloned copy:
 This copies the current launcher into `%LOCALAPPDATA%\CodexV1Subagents` and
 creates **Codex - v1 Subagents** on the Desktop and in the Start Menu. The
 shortcut runs that pinned local copy without contacting npm.
+The shortcut uses the project's distinct V1 subagents icon, leaving the official
+Codex shortcut visually unchanged.
 
 Startup failures appear in a dialog and are written to
 `%LOCALAPPDATA%\CodexV1Subagents\runtime-patch.log`.
