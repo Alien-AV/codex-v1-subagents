@@ -1,6 +1,6 @@
 {
   "name": "codex-v1-subagents",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "description": "Restore interactive legacy full-task tabs for Codex desktop subagents on Windows.",
   "license": "MIT",
   "type": "commonjs",

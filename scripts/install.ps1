@@ -11,6 +11,7 @@ $package = Get-AppxPackage -Name 'OpenAI.Codex' | Sort-Object Version -Descendin
 if (-not $package) {
     throw 'The OpenAI.Codex Windows package is not installed.'
 }
+$codexExe = Join-Path $package.InstallLocation 'app\ChatGPT.exe'
 
 $pathNode = Get-Command node -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source -First 1
 $nodeCandidates = @(
@@ -66,8 +67,24 @@ $hiddenLauncher = Join-Path $installRoot 'launch-hidden.vbs'
 $command = '"{0}" -NoProfile -ExecutionPolicy Bypass -File "{1}"' -f $powershellExe, $launchScript
 $vbsCommand = $command.Replace('"', '""')
 $vbsLog = $logFile.Replace('"', '""')
+$vbsCodexExe = $codexExe.Replace('"', '""')
 $vbs = @"
 Set shell = CreateObject("WScript.Shell")
+codexRunning = False
+On Error Resume Next
+Set processService = GetObject("winmgmts:\\.\root\cimv2")
+Set codexProcesses = processService.ExecQuery("SELECT ExecutablePath FROM Win32_Process WHERE Name = 'ChatGPT.exe'")
+For Each codexProcess In codexProcesses
+  If Not IsNull(codexProcess.ExecutablePath) Then
+    If LCase(CStr(codexProcess.ExecutablePath)) = LCase("$vbsCodexExe") Then codexRunning = True
+  End If
+Next
+Err.Clear
+On Error GoTo 0
+If codexRunning Then
+  shell.Popup "Codex is already running." & vbCrLf & "Quit the existing Codex instance, then try again.", 0, "Codex v1 Subagents", 48
+  WScript.Quit 0
+End If
 exitCode = shell.Run("$vbsCommand", 0, True)
 If exitCode <> 0 Then
   shell.Popup "Codex v1 Subagents failed to start." & vbCrLf & "See: $vbsLog", 0, "Codex v1 Subagents", 16
