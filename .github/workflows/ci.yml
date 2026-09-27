@@ -20,3 +20,7 @@ jobs:
           node-version: ${{ matrix.node-version }}
       - run: npm test
       - run: npm run check
+      - run: ./test/package-launch.ps1 -CompileOnly
+        shell: pwsh
+      - run: ./test/package-launch.ps1 -CompileOnly
+        shell: powershell

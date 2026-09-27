@@ -81,8 +81,12 @@ You can always launch normal, unpatched Codex using its official shortcut.
 
 ## How it works
 
-The launcher starts the unmodified Codex executable with Chromium's private CDP
-pipe. It pauses new renderer targets, intercepts two exact JavaScript chunks at
+The launcher uses Windows package activation to run Node with Codex's installed
+package identity, verifies that identity, and starts the unmodified Codex executable
+with Chromium's private CDP pipe. A user-only local pipe carries the original
+launcher environment and log output; it does not write environment secrets to disk.
+The activation helper is compiled in memory by PowerShell; no extra SDK is needed.
+It pauses new renderer targets, intercepts two exact JavaScript chunks at
 response time, validates their semantic structure, rewrites them in memory, and
 then lets Chromium evaluate them.
 Existing renderers are reloaded once through the same interceptor.
@@ -117,15 +121,19 @@ launcher use V1; existing tasks that were already created as V2 remain V2.
 ```powershell
 node --check runtime-patch.cjs
 node --check catalog-override.cjs
+node --check package-runtime.cjs
 node --check bin/cli.cjs
-node --test runtime-patch.test.cjs
+node --test runtime-patch.test.cjs package-runtime.test.cjs
 ```
+
+Optional Windows package-activation test (requires Codex installed, but opens no
+Codex window): `& '.\test\package-launch.ps1'`.
 
 ## Compatibility
 
-- Tested with OpenAI.Codex `26.825.6671.0`, `26.901.4073.0`,
+- Current package-aware launcher tested with OpenAI.Codex `26.924.2738.0`.
+- UI hooks also verified on `26.825.6671.0`, `26.901.4073.0`,
   `26.901.5003.0`, `26.901.6511.0`, and `26.903.8094.0`.
-- Both hooks verified against the installed app sources for `26.924.2738.0`.
 
 The launcher discovers hash-named renderer chunks and checks the exact UI
 structure it changes. Harmless package and chunk-hash updates therefore work

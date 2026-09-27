@@ -3,6 +3,13 @@
 This project launches Codex with Chromium's `--remote-debugging-pipe`. The pipe
 is inherited privately by the launcher; it does not expose a TCP debugging port.
 
+Windows package activation gives the Node host and its children the installed
+Codex package identity. The helper checks the exact package full name before
+proceeding. The environment/logging pipe has an explicit current-user ACL,
+rejects remote clients, and verifies the connecting process ID before sending
+the environment. Environment values are never written to disk. Losing the
+launcher connection stops its Codex child and attempts config restoration.
+
 The patch is fail-closed:
 
 - it requires one exact structural source signature for each change;

@@ -170,12 +170,10 @@ function patchForUrl(url) {
   return Object.entries(PATCHES).find(([, patch]) => patch.fileNamePattern.test(fileName));
 }
 
-async function main() {
-  const executable = process.argv[2];
-  const logPath = process.argv[3] || path.join(__dirname, 'runtime-patch.log');
-  const codexCli = process.argv[4];
+async function main({ executable, logPath = path.join(__dirname, 'runtime-patch.log'), codexCli, signal, writeLog = line => process.stdout.write(line) }) {
+  signal?.throwIfAborted();
   if (!executable)
-    throw new Error('Usage: node runtime-patch.cjs <ChatGPT.exe> [log-file] <codex.exe>');
+    throw new Error('The Codex executable path is required');
   if (!fs.existsSync(executable))
     throw new Error(`Codex executable not found: ${executable}`);
   if (!codexCli)
@@ -186,7 +184,7 @@ async function main() {
   const log = message => {
     const line = `${new Date().toISOString()} ${message}`;
     fs.appendFileSync(logPath, `${line}\n`, 'utf8');
-    process.stdout.write(`${line}\n`);
+    writeLog(`${line}\n`);
   };
 
   if (TESTED_CODEX_VERSIONS.includes(packageVersion))
@@ -230,6 +228,13 @@ async function main() {
     windowsHide: false,
     stdio: ['ignore', 'ignore', 'pipe', 'pipe', 'pipe'],
   });
+  const stopForLauncherExit = () => {
+    cleanupOverride();
+    if (!child.killed) child.kill();
+  };
+  signal?.addEventListener('abort', stopForLauncherExit, { once: true });
+  child.once('exit', () => signal?.removeEventListener('abort', stopForLauncherExit));
+  if (signal?.aborted) stopForLauncherExit();
 
   child.stderr.setEncoding('utf8');
   child.stderr.on('data', data => {
@@ -254,6 +259,8 @@ async function main() {
     resolveSuccess = resolve;
     rejectSuccess = reject;
   });
+  // Startup can fail while the first CDP calls are still pending.
+  success.catch(() => {});
   const timer = setTimeout(() => {
     const bestSession = [...sessions.values()].sort((left, right) => right.patches.size - left.patches.size)[0];
     const installed = bestSession?.patches || new Set();
@@ -273,7 +280,8 @@ async function main() {
       : hookFailure(packageVersion, error.message || String(error));
     clearTimeout(timer);
     rejectSuccess(fatalError);
-    if (primaryPatched && !child.killed)
+    cdp.close(fatalError);
+    if (!child.killed)
       child.kill();
   }
 
@@ -420,6 +428,7 @@ async function main() {
   });
 
   const childExit = new Promise((resolve, reject) => {
+    child.once('error', reject);
     child.once('exit', (code, signal) => {
       cleanupOverride();
       if (!primaryPatched && !fatalError)
@@ -433,6 +442,7 @@ async function main() {
         resolve({ code, signal });
     });
   });
+  childExit.catch(() => {});
 
   let phase = 'hooking the renderer';
   try {
@@ -475,16 +485,15 @@ async function main() {
     if (!child.killed)
       child.kill();
     throw failure;
+  } finally {
+    clearTimeout(timer);
+    process.removeListener('exit', cleanupOverride);
+    cleanupOverride();
   }
 }
 
-if (require.main === module) {
-  main().catch(() => {
-    process.exitCode = 1;
-  });
-}
-
 module.exports = {
+  main,
   applyPatch,
   CdpPipe,
   hookFailure,

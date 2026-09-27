@@ -28,6 +28,8 @@ $installRoot = Join-Path $env:LOCALAPPDATA 'CodexV1Subagents'
 New-Item -ItemType Directory -Path $installRoot -Force | Out-Null
 Copy-Item -LiteralPath (Join-Path $PackageRoot 'runtime-patch.cjs') -Destination $installRoot -Force
 Copy-Item -LiteralPath (Join-Path $PackageRoot 'catalog-override.cjs') -Destination $installRoot -Force
+Copy-Item -LiteralPath (Join-Path $PackageRoot 'package-runtime.cjs') -Destination $installRoot -Force
+Copy-Item -LiteralPath (Join-Path $PackageRoot 'package-launch.cs') -Destination $installRoot -Force
 Copy-Item -LiteralPath (Join-Path $PackageRoot 'launch.ps1') -Destination $installRoot -Force
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'uninstall.ps1') -Destination $installRoot -Force
 $iconPath = Join-Path $installRoot 'codex-v1-subagents.ico'
