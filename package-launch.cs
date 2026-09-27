@@ -21,6 +21,16 @@ namespace CodexV1Subagents
             [MarshalAs(UnmanagedType.LPWStr)] string exe,
             [MarshalAs(UnmanagedType.LPWStr)] string args,
             uint options, uint parent, out IntPtr process);
+        void ActivateWithOptionsAndArgs([MarshalAs(UnmanagedType.LPWStr)] string id,
+            [MarshalAs(UnmanagedType.LPWStr)] string exe,
+            [MarshalAs(UnmanagedType.LPWStr)] string args,
+            uint parent, IntPtr activatedEventArgs, out IntPtr process);
+        void ActivateWithOptionsArgsWorkingDirectoryShowWindow([MarshalAs(UnmanagedType.LPWStr)] string id,
+            [MarshalAs(UnmanagedType.LPWStr)] string exe,
+            [MarshalAs(UnmanagedType.LPWStr)] string args,
+            uint options, uint parent, IntPtr activatedEventArgs,
+            [MarshalAs(UnmanagedType.LPWStr)] string workingDirectory,
+            uint showWindow, out IntPtr process);
     }
 
     public static class PackageLauncher
@@ -93,8 +103,10 @@ namespace CodexV1Subagents
                 {
                     var connection = pipe.BeginWaitForConnection(null, null);
                     activator = Activator.CreateInstance(Type.GetTypeFromCLSID(new Guid("168EB462-775F-42AE-9111-D714B2306C2E")));
-                    ((IDesktopAppXActivator)activator).ActivateWithOptions(appId, node,
-                        QuoteArgument(script) + " " + QuoteArgument(pipeName), 6 | 8 | 32, 0, out process);
+                    // SW_HIDE applies to the Node host only, not Codex's own UI.
+                    ((IDesktopAppXActivator)activator).ActivateWithOptionsArgsWorkingDirectoryShowWindow(appId, node,
+                        QuoteArgument(script) + " " + QuoteArgument(pipeName), 6 | 8 | 32, 0, IntPtr.Zero,
+                        Path.GetDirectoryName(script), 0, out process);
 
                     uint length = 0;
                     int status = GetPackageFullName(process, ref length, null);

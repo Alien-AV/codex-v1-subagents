@@ -9,9 +9,11 @@ const socket = net.connect(`\\\\.\\pipe\\${process.argv[2]}`);
 runSession(socket, async ({ writeLog }) => {
   assert.equal(process.env.CODEX_V1_LAUNCH_TEST, 'preserved "quoted" value');
   const probe = spawnSync(path.join(process.env.WINDIR, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe'),
-    ['-NoProfile', '-File', path.join(__dirname, 'package-identity.ps1')], { encoding: 'utf8', windowsHide: true });
+    ['-NoProfile', '-File', path.join(__dirname, 'package-identity.ps1'), '-ConsoleProcessId', String(process.pid)],
+    { encoding: 'utf8', windowsHide: true });
   assert.equal(probe.status, 0, probe.stderr);
   assert.match(probe.stdout, /OpenAI\.Codex_/);
+  assert.match(probe.stdout, /Node console is hidden/);
   writeLog(`Verified child package identity: ${probe.stdout.trim()}\n`);
   writeLog('Verified private-pipe environment transfer. No Codex window launched.\n');
 }).catch(error => {
