@@ -13,6 +13,7 @@ const TESTED_CODEX_VERSIONS = Object.freeze([
   '26.901.5003.0',
   '26.901.6511.0',
   '26.903.8094.0',
+  '26.924.2738.0',
 ]);
 const HOOK_BASELINE_VERSION = TESTED_CODEX_VERSIONS.at(-1);
 
@@ -36,7 +37,7 @@ const PATCHES = Object.freeze({
     fileNamePattern: /^local-conversation-page-[\da-f]+\.js$/i,
     urlPattern: '*local-conversation-page-*.js',
     sourcePattern: new RegExp(
-      `if\\(!(?<agent>${IDENTIFIER})\\.canInteract\\)\\{${IDENTIFIER}\\((?<tabs>${IDENTIFIER}),\\{hostId:(?<host>${IDENTIFIER}),parentConversationId:${IDENTIFIER},selectedConversationId:\\k<agent>\\.conversationId,selectedDisplayName:\\k<agent>\\.displayName\\}\\);return\\}(?<open>${IDENTIFIER}\\(\\k<tabs>,\\{backgroundAgent:\\k<agent>,hostId:\\k<host>,TabComponent:${IDENTIFIER}\\}\\))`,
+      `if\\(!(?<agent>${IDENTIFIER})\\.canInteract\\)\\{${IDENTIFIER}\\((?<tabs>${IDENTIFIER}),\\{hostId:(?<host>${IDENTIFIER}),parentConversationId:${IDENTIFIER},selectedConversationId:\\k<agent>\\.conversationId,selectedDisplayName:\\k<agent>\\.displayName\\}\\);return\\}(?<open>${IDENTIFIER}\\(\\k<tabs>,\\{backgroundAgent:\\k<agent>,hostId:\\k<host>(?:,TabComponent:${IDENTIFIER})?\\}\\))`,
       'g',
     ),
     replacement: groups => groups.open,

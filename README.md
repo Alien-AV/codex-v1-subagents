@@ -125,6 +125,7 @@ node --test runtime-patch.test.cjs
 
 - Tested with OpenAI.Codex `26.825.6671.0`, `26.901.4073.0`,
   `26.901.5003.0`, `26.901.6511.0`, and `26.903.8094.0`.
+- Both hooks verified against the installed app sources for `26.924.2738.0`.
 
 The launcher discovers hash-named renderer chunks and checks the exact UI
 structure it changes. Harmless package and chunk-hash updates therefore work

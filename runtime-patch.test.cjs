@@ -208,10 +208,11 @@ test('recognizes hashed renderer chunks without pinning their hashes', () => {
   assert.equal(patchForUrl('file:///app/resources/app.asar/webview/assets/unrelated.js'), undefined);
 });
 
-test('patches both known builds using structural identifiers', () => {
+test('patches known builds using structural identifiers', () => {
   const routeFixtures = [
     'if(!e.canInteract){$a(o,{hostId:h,parentConversationId:r,selectedConversationId:e.conversationId,selectedDisplayName:e.displayName});return}Qa(o,{backgroundAgent:e,hostId:h,TabComponent:Ea})',
     'if(!agent.canInteract){openTask(tabs,{hostId:host,parentConversationId:parent,selectedConversationId:agent.conversationId,selectedDisplayName:agent.displayName});return}openLegacy(tabs,{backgroundAgent:agent,hostId:host,TabComponent:LegacyTab})',
+    'if(!e.canInteract){vc(u,{hostId:C,parentConversationId:i,selectedConversationId:e.conversationId,selectedDisplayName:e.displayName});return}_c(u,{backgroundAgent:e,hostId:C})',
   ];
   for (const fixture of routeFixtures) {
     const result = applyPatch(`prefix${fixture}suffix`, PATCHES.legacyThreadRoute);
@@ -225,6 +226,38 @@ test('patches both known builds using structural identifiers', () => {
     assert.equal(result.changed, true);
     assert.equal(result.source, `prefixprops:{canInteract:!0,conversationId:${agent}.conversationIdsuffix`);
   }
+});
+
+test('26.924 route opens an interactive full tab for either canInteract value', () => {
+  const source = 'if(i!=null){if(!e.canInteract){vc(u,{hostId:C,parentConversationId:i,selectedConversationId:e.conversationId,selectedDisplayName:e.displayName});return}_c(u,{backgroundAgent:e,hostId:C})}';
+  const patched = applyPatch(source, PATCHES.legacyThreadRoute);
+  assert.equal(patched.changed, true);
+  const route = new Function('e', 'i', 'u', 'C', 'vc', '_c', patched.source);
+  const tabs = {};
+  const calls = [];
+  const panel = () => assert.fail('must not open the non-interactive panel');
+  const fullTab = (...args) => calls.push(args);
+  for (const canInteract of [false, true]) {
+    const agent = { canInteract, conversationId: 'child', displayName: 'Child' };
+    route(agent, 'parent', tabs, 'local', panel, fullTab);
+    assert.deepEqual(calls.at(-1), [tabs, { backgroundAgent: agent, hostId: 'local' }]);
+  }
+  route({}, null, tabs, 'local', panel, fullTab);
+  assert.equal(calls.length, 2, 'preserves the parent-conversation guard');
+});
+
+test('route signature rejects mismatched arguments and duplicate route blocks', () => {
+  const patch = PATCHES.legacyThreadRoute;
+  const source = 'if(!e.canInteract){vc(u,{hostId:C,parentConversationId:i,selectedConversationId:e.conversationId,selectedDisplayName:e.displayName});return}_c(u,{backgroundAgent:e,hostId:C})';
+  for (const changed of [
+    source.replace('backgroundAgent:e', 'backgroundAgent:other'),
+    source.replace('_c(u,', '_c(other,'),
+    source.replace('backgroundAgent:e,hostId:C', 'backgroundAgent:e,hostId:other'),
+    source.replace('backgroundAgent:e,hostId:C', 'backgroundAgent:e,hostId:C,unknown:true'),
+  ]) {
+    assert.equal(applyPatch(changed, patch).changed, false);
+  }
+  assert.throws(() => applyPatch(source + source, patch), /expected exactly 1 structural match, got 2/);
 });
 
 test('irrelevant candidate chunks are skipped and ambiguous signatures fail closed', () => {
