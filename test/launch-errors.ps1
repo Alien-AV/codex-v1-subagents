@@ -82,3 +82,5 @@ try {
     if (-not $resolved.StartsWith($tempRoot, [StringComparison]::OrdinalIgnoreCase) -or (Split-Path -Leaf $resolved) -notlike 'codex-launch-error-test-*') { throw 'Unsafe test cleanup path' }
     Remove-Item -LiteralPath $resolved -Recurse -Force
 }
+# The failure probes deliberately return nonzero; do not leak that status to CI.
+exit 0
