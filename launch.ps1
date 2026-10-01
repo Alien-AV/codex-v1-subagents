@@ -6,6 +6,17 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
+$logFile = if ($LogFile) { [IO.Path]::GetFullPath($LogFile) } else { Join-Path $PSScriptRoot 'runtime-patch.log' }
+$launchAttempted = $false
+. (Join-Path $PSScriptRoot 'launch-errors.ps1')
+trap {
+    $reason = $_.Exception.Message
+    try { $message = Write-LaunchFailure -Reason $reason -LogFile $logFile -LaunchAttempted $launchAttempted }
+    catch { $message = "$reason`r`nCould not write the failure report: $($_.Exception.Message)" }
+    [Console]::Error.WriteLine($message)
+    exit 1
+}
+
 $running = Get-Process -Name 'ChatGPT' -ErrorAction SilentlyContinue
 if ($running) {
     throw 'Codex is already running. Fully quit it from the tray, then run this launcher again.'
@@ -22,7 +33,6 @@ $codexCli = Get-ChildItem -LiteralPath (Join-Path $env:LOCALAPPDATA 'OpenAI\Code
 if (-not $codexCli) {
     throw 'The Codex CLI runtime was not found. Launch normal Codex once, let it finish loading, quit it, and retry.'
 }
-$logFile = if ($LogFile) { $LogFile } else { Join-Path $PSScriptRoot 'runtime-patch.log' }
 $pathNode = Get-Command node -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source -First 1
 $nodeCandidates = @(
     $NodeExe,
@@ -50,6 +60,9 @@ $startup = @{
 } | ConvertTo-Json -Depth 4 -Compress
 try {
     Add-Type -Path (Join-Path $PSScriptRoot 'package-launch.cs')
+    # Clear stale diagnostics only after the already-running/preflight checks.
+    [IO.File]::WriteAllText($logFile, '')
+    $launchAttempted = $true
     $exitCode = [CodexV1Subagents.PackageLauncher]::Run(
         $resolvedNode, (Join-Path $PSScriptRoot 'package-runtime.cjs'),
         ($package.PackageFamilyName + '!App'), $package.PackageFullName, $startup)
@@ -64,7 +77,7 @@ if ($exitCode -ne 0) {
         Select-Object -Last 1
     if ($failureLine) {
         $message = $failureLine -replace '^.* PATCH FAILED: ', ''
-        throw "Codex v1 Subagents: $message See $logFile"
+        throw $message
     }
     throw "Codex v1 Subagents could not start, but no detailed failure was recorded. See $logFile"
 }

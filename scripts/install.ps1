@@ -31,6 +31,7 @@ Copy-Item -LiteralPath (Join-Path $PackageRoot 'catalog-override.cjs') -Destinat
 Copy-Item -LiteralPath (Join-Path $PackageRoot 'package-runtime.cjs') -Destination $installRoot -Force
 Copy-Item -LiteralPath (Join-Path $PackageRoot 'package-launch.cs') -Destination $installRoot -Force
 Copy-Item -LiteralPath (Join-Path $PackageRoot 'launch.ps1') -Destination $installRoot -Force
+Copy-Item -LiteralPath (Join-Path $PackageRoot 'launch-errors.ps1') -Destination $installRoot -Force
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'uninstall.ps1') -Destination $installRoot -Force
 $iconPath = Join-Path $installRoot 'codex-v1-subagents.ico'
 Copy-Item -LiteralPath (Join-Path $PackageRoot 'assets\codex-v1-subagents.ico') -Destination $iconPath -Force
@@ -56,6 +57,9 @@ try {
     }
 } catch {
     Add-Content -LiteralPath '$escapedLog' -Value "`$(Get-Date -Format o) AUTO-UPDATE FAILED: `$_"
+    if (`$env:CODEX_V1_ERROR_FILE -and -not (Test-Path -LiteralPath `$env:CODEX_V1_ERROR_FILE)) {
+        [IO.File]::WriteAllText(`$env:CODEX_V1_ERROR_FILE, "Could not download or run the latest launcher from npm.`r`nCheck your internet connection and retry. If this persists, run npx codex-v1-subagents@latest --help in PowerShell to see npm's error.`r`nConfig restoration was not checked; this wrapper did not edit your config.`r`nLog: $escapedLog", [Text.Encoding]::Unicode)
+    }
     throw
 }
 "@
@@ -69,6 +73,7 @@ $hiddenLauncher = Join-Path $installRoot 'launch-hidden.vbs'
 $command = '"{0}" -NoProfile -ExecutionPolicy Bypass -File "{1}"' -f $powershellExe, $launchScript
 $vbsCommand = $command.Replace('"', '""')
 $vbsLog = $logFile.Replace('"', '""')
+$vbsInstallRoot = $installRoot.Replace('"', '""')
 $vbsCodexExe = $codexExe.Replace('"', '""')
 $vbs = @"
 Set shell = CreateObject("WScript.Shell")
@@ -87,10 +92,28 @@ If codexRunning Then
   shell.Popup "Codex is already running." & vbCrLf & "Quit the existing Codex instance, then try again.", 0, "Codex v1 Subagents", 48
   WScript.Quit 0
 End If
+Set files = CreateObject("Scripting.FileSystemObject")
+errorFile = files.BuildPath("$vbsInstallRoot", files.GetTempName)
+Set launchEnvironment = shell.Environment("PROCESS")
+launchEnvironment("CODEX_V1_ERROR_FILE") = errorFile
 exitCode = shell.Run("$vbsCommand", 0, True)
 If exitCode <> 0 Then
-  shell.Popup "Codex v1 Subagents failed to start." & vbCrLf & "See: $vbsLog", 0, "Codex v1 Subagents", 16
+  failureMessage = "The launcher failed before a detailed report was available." & vbCrLf & "Check your internet connection, then run npx codex-v1-subagents@latest run in PowerShell to see the error." & vbCrLf & "Config restoration could not be confirmed." & vbCrLf & "Log: $vbsLog"
+  On Error Resume Next
+  If files.FileExists(errorFile) Then
+    Set report = files.OpenTextFile(errorFile, 1, False, -1)
+    If Err.Number = 0 Then
+      failureMessage = report.ReadAll
+      report.Close
+    End If
+  End If
+  Err.Clear
+  On Error GoTo 0
+  shell.Popup failureMessage, 0, "Codex v1 Subagents", 16
 End If
+On Error Resume Next
+If files.FileExists(errorFile) Then files.DeleteFile errorFile, True
+On Error GoTo 0
 "@
 Set-Content -LiteralPath $hiddenLauncher -Value $vbs -Encoding ascii
 

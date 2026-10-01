@@ -206,6 +206,22 @@ test('recognizes hashed renderer chunks without pinning their hashes', () => {
   assert.equal(patchForUrl('file:///app/resources/app.asar/webview/assets/open-local-conversation-background-agent-5306c5486ea3.js')[0], 'interactiveSubagent');
   assert.equal(patchForUrl('file:///app/resources/app.asar/webview/assets/open-local-conversation-background-agent-e68f617b5227.js')[0], 'interactiveSubagent');
   assert.equal(patchForUrl('file:///app/resources/app.asar/webview/assets/unrelated.js'), undefined);
+  assert.equal(patchForUrl('file:///app/resources/app.asar/webview/assets/app-initial-fd3c4b862660.js')[0], 'interactiveSubagent');
+  assert.equal(patchForUrl('file:///app/resources/app.asar/webview/assets/app-shared-a906948d8868.js'), undefined);
+});
+
+test('26.928 shared startup chunk enables interaction and the re-export chunk is skipped', () => {
+  const patch = PATCHES.interactiveSubagent;
+  assert.ok(patch.urlPatterns.includes('*app-initial-*.js'));
+  assert.ok(patch.urlPatterns.includes('*open-local-conversation-background-agent-*.js'));
+  const source = 'return {props:{canInteract:n.canInteract,conversationId:n.conversationId,hostId:i,shouldResume:s}}';
+  const result = applyPatch(source, patch);
+  assert.equal(result.changed, true);
+  const open = new Function('n', 'i', 's', result.source);
+  assert.deepEqual(open({ canInteract: false, conversationId: 'child' }, 'local', true), {
+    props: { canInteract: true, conversationId: 'child', hostId: 'local', shouldResume: true },
+  });
+  assert.equal(applyPatch('export{r as backgroundAgentTabType,t as openLocalConversationBackgroundAgent}', patch).changed, false);
 });
 
 test('patches known builds using structural identifiers', () => {

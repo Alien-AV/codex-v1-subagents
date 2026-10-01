@@ -26,5 +26,13 @@ changes. Each temporary setting must still have the exact value written by the
 launcher before it can be removed. Overlapping or ambiguous edits preserve both
 versions and fail closed.
 
+Config restoration retries only access-denied/busy errors on the config file's
+read, stat, rename, or removal operations, for at most seven attempts per recovery
+call. Each attempt re-reads the config and repeats the checksum/owned-setting
+checks, so waiting does not authorize overwriting intervening user edits.
+Shortcut error reports use a fresh per-launch filename in the installation
+directory and are removed after display; an old log is not treated as proof
+that a new launch restored the config.
+
 Do not weaken the structural source-signature checks when updating support for a
 new Codex release. Review changed renderer behavior and update tests first.

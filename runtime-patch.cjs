@@ -14,6 +14,7 @@ const TESTED_CODEX_VERSIONS = Object.freeze([
   '26.901.6511.0',
   '26.903.8094.0',
   '26.924.2738.0',
+  '26.928.2636.0',
 ]);
 const HOOK_BASELINE_VERSION = TESTED_CODEX_VERSIONS.at(-1);
 
@@ -35,7 +36,7 @@ const PATCHES = Object.freeze({
   legacyThreadRoute: Object.freeze({
     displayName: 'local-conversation-page-*.js',
     fileNamePattern: /^local-conversation-page-[\da-f]+\.js$/i,
-    urlPattern: '*local-conversation-page-*.js',
+    urlPatterns: ['*local-conversation-page-*.js'],
     sourcePattern: new RegExp(
       `if\\(!(?<agent>${IDENTIFIER})\\.canInteract\\)\\{${IDENTIFIER}\\((?<tabs>${IDENTIFIER}),\\{hostId:(?<host>${IDENTIFIER}),parentConversationId:${IDENTIFIER},selectedConversationId:\\k<agent>\\.conversationId,selectedDisplayName:\\k<agent>\\.displayName\\}\\);return\\}(?<open>${IDENTIFIER}\\(\\k<tabs>,\\{backgroundAgent:\\k<agent>,hostId:\\k<host>(?:,TabComponent:${IDENTIFIER})?\\}\\))`,
       'g',
@@ -43,9 +44,9 @@ const PATCHES = Object.freeze({
     replacement: groups => groups.open,
   }),
   interactiveSubagent: Object.freeze({
-    displayName: 'open-local-conversation-background-agent-*.js',
-    fileNamePattern: /^open-local-conversation-background-agent-[\da-f]+\.js$/i,
-    urlPattern: '*open-local-conversation-background-agent-*.js',
+    displayName: 'interactive subagent (app-initial/open-local-conversation-background-agent)',
+    fileNamePattern: /^(?:app-initial|open-local-conversation-background-agent)-[\da-f]+\.js$/i,
+    urlPatterns: ['*app-initial-*.js', '*open-local-conversation-background-agent-*.js'],
     sourcePattern: new RegExp(
       `props:\\{canInteract:(?<agent>${IDENTIFIER})\\.canInteract,conversationId:\\k<agent>\\.conversationId`,
       'g',
@@ -352,11 +353,11 @@ async function main({ executable, logPath = path.join(__dirname, 'runtime-patch.
     const preparation = (async () => {
       targetSessions.set(targetInfo.targetId, sessionId);
       sessions.set(sessionId, { targetId: targetInfo.targetId, patches: new Set(), patchUrls: new Map() });
-      const patterns = Object.values(PATCHES).map(patch => ({
-        urlPattern: patch.urlPattern,
+      const patterns = Object.values(PATCHES).flatMap(patch => patch.urlPatterns.map(urlPattern => ({
+        urlPattern,
         resourceType: 'Script',
         requestStage: 'Response',
-      }));
+      })));
       try {
         await cdp.send('Fetch.enable', { patterns }, sessionId);
         log(`Intercepting renderer target ${targetInfo.targetId}`);

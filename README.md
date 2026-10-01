@@ -45,8 +45,17 @@ Codex shortcut visually unchanged.
 
 Startup failures appear in a dialog and are written to
 `%LOCALAPPDATA%\CodexV1Subagents\runtime-patch.log`.
+The dialog includes the failure reason, whether config recovery is confirmed,
+and a next step. Brief config-access failures are retried automatically (up to
+seven attempts, with 2.55 seconds of backoff); permanent failures preserve recovery
+files rather than overwriting conflicting edits.
 Compatibility errors report the installed Codex version, the latest tested
 version, and the hook whose expected structure did not match.
+
+Shortcuts installed before this detailed-dialog behavior need one reinstall
+(`install`, or `install --auto-update` to keep automatic updates) to refresh their
+local error-display wrapper. Automatic npm updates alone update the patch, not
+that installed wrapper.
 
 The official Codex shortcut and installed package remain untouched.
 
@@ -123,7 +132,8 @@ node --check runtime-patch.cjs
 node --check catalog-override.cjs
 node --check package-runtime.cjs
 node --check bin/cli.cjs
-node --test runtime-patch.test.cjs package-runtime.test.cjs
+node --test runtime-patch.test.cjs package-runtime.test.cjs catalog-retry.test.cjs
+& '.\test\launch-errors.ps1'
 ```
 
 Optional Windows package-activation test (requires Codex installed, but opens no
@@ -131,9 +141,9 @@ Codex window): `& '.\test\package-launch.ps1'`.
 
 ## Compatibility
 
-- Current package-aware launcher tested with OpenAI.Codex `26.924.2738.0`.
+- Current package-aware launcher and UI hooks verified with OpenAI.Codex `26.928.2636.0`.
 - UI hooks also verified on `26.825.6671.0`, `26.901.4073.0`,
-  `26.901.5003.0`, `26.901.6511.0`, and `26.903.8094.0`.
+  `26.901.5003.0`, `26.901.6511.0`, `26.903.8094.0`, and `26.924.2738.0`.
 
 The launcher discovers hash-named renderer chunks and checks the exact UI
 structure it changes. Harmless package and chunk-hash updates therefore work

@@ -24,3 +24,7 @@ jobs:
         shell: pwsh
       - run: ./test/package-launch.ps1 -CompileOnly
         shell: powershell
+      - run: ./test/launch-errors.ps1
+        shell: pwsh
+      - run: ./test/launch-errors.ps1
+        shell: powershell

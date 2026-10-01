@@ -9,6 +9,8 @@ const APP_DIRECTORY_NAME = 'CodexV1Subagents';
 const BACKUP_SUFFIX = '.codex-v1-subagents.backup';
 const MARKER_SUFFIX = '.codex-v1-subagents.transaction.json';
 const LOCK_SUFFIX = '.codex-v1-subagents.lock';
+const CONFIG_RETRY_DELAYS_MS = Object.freeze([50, 100, 200, 400, 800, 1000]);
+const retryWait = new Int32Array(new SharedArrayBuffer(4));
 
 function sha256(value) {
   return crypto.createHash('sha256').update(value).digest('hex');
@@ -359,7 +361,34 @@ function cleanupTransactionFiles(paths) {
   fs.rmSync(paths.lockPath, { force: true });
 }
 
-function recoverConfigTransaction(configPath, log = () => {}) {
+function recoverConfigTransaction(configPath, log = () => {}, {
+  delays = CONFIG_RETRY_DELAYS_MS,
+  sleep = milliseconds => Atomics.wait(retryWait, 0, 0, milliseconds),
+} = {}) {
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      // Re-read and validate on every attempt; never retry a stale replacement.
+      return recoverConfigTransactionOnce(configPath, log);
+    } catch (error) {
+      const configAccess = (error.syscall === 'rename' && error.dest === configPath)
+        || (['open', 'stat', 'unlink'].includes(error.syscall) && error.path === configPath);
+      if (!configAccess || !['EPERM', 'EACCES', 'EBUSY'].includes(error.code))
+        throw error;
+      if (attempt === delays.length) {
+        const failure = new Error(
+          `Windows could not access config.toml after ${attempt + 1} automatic attempts. Another process may be using it, or permissions may prevent access.`,
+          { cause: error },
+        );
+        failure.code = 'CONFIG_FILE_BUSY';
+        throw failure;
+      }
+      log(`Config access temporarily denied (${error.code}); retrying restoration in ${delays[attempt]}ms (${attempt + 1}/${delays.length})`);
+      sleep(delays[attempt]);
+    }
+  }
+}
+
+function recoverConfigTransactionOnce(configPath, log) {
   const paths = transactionPaths(configPath);
   if (!fs.existsSync(paths.markerPath)) {
     if (fs.existsSync(paths.backupPath)) {
@@ -485,7 +514,7 @@ function beginConfigTransaction(configPath, catalogPath, log = () => {}) {
     restore() {
       if (restored)
         return;
-      recoverConfigTransaction(configPath);
+      recoverConfigTransaction(configPath, log);
       restored = true;
       log(`Restored original Codex config: ${configPath}`);
     },
