@@ -262,6 +262,43 @@ test('26.924 route opens an interactive full tab for either canInteract value', 
   assert.equal(calls.length, 2, 'preserves the parent-conversation guard');
 });
 
+test('26.1027 ternary route opens full tabs and preserves the parent guard', () => {
+  const source = 'return r!=null&&(e.canInteract?pc(d,{backgroundAgent:e,hostId:b}):mc(d,{hostId:b,parentConversationId:r,selectedConversationId:e.conversationId,selectedDisplayName:e.displayName}))';
+  const patched = applyPatch(source, PATCHES.legacyThreadRoute);
+  assert.equal(patched.changed, true);
+  assert.equal(patched.source, 'return r!=null&&(pc(d,{backgroundAgent:e,hostId:b}))');
+  const route = new Function('e', 'r', 'd', 'b', 'pc', 'mc', patched.source);
+  const tabs = {};
+  const calls = [];
+  const fullTab = (...args) => { calls.push(args); return 'opened'; };
+  const panel = () => assert.fail('must not open the read-only panel');
+  for (const canInteract of [false, true]) {
+    const agent = { canInteract, conversationId: 'child', displayName: 'Child' };
+    assert.equal(route(agent, 'parent', tabs, 'local', fullTab, panel), 'opened');
+    assert.deepEqual(calls.at(-1), [tabs, { backgroundAgent: agent, hostId: 'local' }]);
+  }
+  for (const parent of [null, undefined])
+    assert.equal(route(null, parent, tabs, 'local', fullTab, panel), false);
+  assert.equal(calls.length, 2);
+});
+
+test('ternary route rejects mismatched arguments, extra properties and mixed duplicates', () => {
+  const source = 'e.canInteract?pc(d,{backgroundAgent:e,hostId:b}):mc(d,{hostId:b,parentConversationId:r,selectedConversationId:e.conversationId,selectedDisplayName:e.displayName})';
+  for (const changed of [
+    source.replace('backgroundAgent:e', 'backgroundAgent:other'),
+    source.replace('mc(d,', 'mc(other,'),
+    source.replace('mc(d,{hostId:b', 'mc(d,{hostId:other'),
+    source.replace('selectedConversationId:e', 'selectedConversationId:other'),
+    source.replace('selectedDisplayName:e', 'selectedDisplayName:other'),
+    source.replace('backgroundAgent:e,hostId:b}', 'backgroundAgent:e,hostId:b,unknown:true}'),
+  ]) {
+    assert.equal(applyPatch(changed, PATCHES.legacyThreadRoute).changed, false);
+  }
+  const legacy = 'if(!e.canInteract){vc(u,{hostId:C,parentConversationId:i,selectedConversationId:e.conversationId,selectedDisplayName:e.displayName});return}_c(u,{backgroundAgent:e,hostId:C})';
+  for (const duplicate of [source + ';' + source, legacy + ';' + source])
+    assert.throws(() => applyPatch(duplicate, PATCHES.legacyThreadRoute), /expected exactly 1 structural match, got 2/);
+});
+
 test('route signature rejects mismatched arguments and duplicate route blocks', () => {
   const patch = PATCHES.legacyThreadRoute;
   const source = 'if(!e.canInteract){vc(u,{hostId:C,parentConversationId:i,selectedConversationId:e.conversationId,selectedDisplayName:e.displayName});return}_c(u,{backgroundAgent:e,hostId:C})';

@@ -141,9 +141,9 @@ Codex window): `& '.\test\package-launch.ps1'`.
 
 ## Compatibility
 
-- Current package-aware launcher and UI hooks verified with OpenAI.Codex `26.928.2636.0`.
+- Current package-aware launcher and UI hooks verified with OpenAI.Codex `26.1027.3384.0`.
 - UI hooks also verified on `26.825.6671.0`, `26.901.4073.0`,
-  `26.901.5003.0`, `26.901.6511.0`, `26.903.8094.0`, and `26.924.2738.0`.
+  `26.901.5003.0`, `26.901.6511.0`, `26.903.8094.0`, `26.924.2738.0`, and `26.928.2636.0`.
 
 The launcher discovers hash-named renderer chunks and checks the exact UI
 structure it changes. Harmless package and chunk-hash updates therefore work

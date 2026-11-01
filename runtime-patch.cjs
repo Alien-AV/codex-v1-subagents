@@ -15,6 +15,7 @@ const TESTED_CODEX_VERSIONS = Object.freeze([
   '26.903.8094.0',
   '26.924.2738.0',
   '26.928.2636.0',
+  '26.1027.3384.0',
 ]);
 const HOOK_BASELINE_VERSION = TESTED_CODEX_VERSIONS.at(-1);
 
@@ -38,10 +39,11 @@ const PATCHES = Object.freeze({
     fileNamePattern: /^local-conversation-page-[\da-f]+\.js$/i,
     urlPatterns: ['*local-conversation-page-*.js'],
     sourcePattern: new RegExp(
-      `if\\(!(?<agent>${IDENTIFIER})\\.canInteract\\)\\{${IDENTIFIER}\\((?<tabs>${IDENTIFIER}),\\{hostId:(?<host>${IDENTIFIER}),parentConversationId:${IDENTIFIER},selectedConversationId:\\k<agent>\\.conversationId,selectedDisplayName:\\k<agent>\\.displayName\\}\\);return\\}(?<open>${IDENTIFIER}\\(\\k<tabs>,\\{backgroundAgent:\\k<agent>,hostId:\\k<host>(?:,TabComponent:${IDENTIFIER})?\\}\\))`,
+      `if\\(!(?<agent>${IDENTIFIER})\\.canInteract\\)\\{${IDENTIFIER}\\((?<tabs>${IDENTIFIER}),\\{hostId:(?<host>${IDENTIFIER}),parentConversationId:${IDENTIFIER},selectedConversationId:\\k<agent>\\.conversationId,selectedDisplayName:\\k<agent>\\.displayName\\}\\);return\\}(?<open>${IDENTIFIER}\\(\\k<tabs>,\\{backgroundAgent:\\k<agent>,hostId:\\k<host>(?:,TabComponent:${IDENTIFIER})?\\}\\))`
+        + `|(?<ternaryAgent>${IDENTIFIER})\\.canInteract\\?(?<ternaryOpen>${IDENTIFIER}\\((?<ternaryTabs>${IDENTIFIER}),\\{backgroundAgent:\\k<ternaryAgent>,hostId:(?<ternaryHost>${IDENTIFIER})\\}\\)):${IDENTIFIER}\\(\\k<ternaryTabs>,\\{hostId:\\k<ternaryHost>,parentConversationId:${IDENTIFIER},selectedConversationId:\\k<ternaryAgent>\\.conversationId,selectedDisplayName:\\k<ternaryAgent>\\.displayName\\}\\)`,
       'g',
     ),
-    replacement: groups => groups.open,
+    replacement: groups => groups.open ?? groups.ternaryOpen,
   }),
   interactiveSubagent: Object.freeze({
     displayName: 'interactive subagent (app-initial/open-local-conversation-background-agent)',
