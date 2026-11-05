@@ -16,6 +16,7 @@ const TESTED_CODEX_VERSIONS = Object.freeze([
   '26.924.2738.0',
   '26.928.2636.0',
   '26.1027.3384.0',
+  '26.1029.7803.0',
 ]);
 const HOOK_BASELINE_VERSION = TESTED_CODEX_VERSIONS.at(-1);
 
@@ -173,6 +174,45 @@ function patchForUrl(url) {
   return Object.entries(PATCHES).find(([, patch]) => patch.fileNamePattern.test(fileName));
 }
 
+// Rspack emits both hooks in the conversation page, plus the same composer
+// module in a second lazy entry. Only the page establishes patch readiness.
+const asyncAssetRoot = 'app://-/assets/async/';
+const numberedChunks = {
+  '953502': ['legacyThreadRoute', 'interactiveSubagent'],
+  '27319': ['interactiveSubagent'],
+};
+const rspackRoute = {
+  displayName: 'subagent full-tab route',
+  sourcePattern: new RegExp(
+    'if\\(!(?<agent>' + IDENTIFIER + ')\\.canInteract\\)return void\\(0,' + IDENTIFIER
+    + '\\.openLocalConversationSubagentsPanel\\)\\((?<tabs>' + IDENTIFIER + '),\\{hostId:(?<host>' + IDENTIFIER
+    + '),parentConversationId:' + IDENTIFIER + ',selectedConversationId:\\k<agent>\\.conversationId,selectedDisplayName:\\k<agent>\\.displayName\\}\\);'
+    + '(?<open>\\(0,' + IDENTIFIER + '\\.openLocalConversationBackgroundAgent\\)\\(\\k<tabs>,\\{backgroundAgent:\\k<agent>,hostId:\\k<host>\\}\\))', 'g'),
+  replacement: groups => groups.open,
+};
+
+function planForUrl(url) {
+  if (url.startsWith(asyncAssetRoot)) {
+    const id = /^(\d+)\.[a-f\d]{10}\.js$/.exec(url.slice(asyncAssetRoot.length))?.[1];
+    const names = numberedChunks[id];
+    if (names) return { names, strict: true, mirror: id === '27319' };
+  }
+  const match = patchForUrl(url);
+  return match && { names: [match[0]], strict: false, mirror: false };
+}
+
+function rewriteResponse(source, plan) {
+  const original = source;
+  for (const name of plan.names) {
+    const rule = plan.strict && name === 'legacyThreadRoute' ? rspackRoute : PATCHES[name];
+    const result = applyPatch(source, rule);
+    if (plan.strict && !result.changed)
+      throw new Error('Numbered renderer chunk: expected one ' + name + ' match, got 0');
+    source = result.source;
+  }
+  return { source, changed: source !== original };
+}
+
 async function main({ executable, logPath = path.join(__dirname, 'runtime-patch.log'), codexCli, signal, writeLog = line => process.stdout.write(line) }) {
   signal?.throwIfAborted();
   if (!executable)
@@ -289,13 +329,14 @@ async function main({ executable, logPath = path.join(__dirname, 'runtime-patch.
   }
 
   async function patchPausedResponse(message) {
-    const matched = patchForUrl(message.params.request?.url || '');
-    if (!matched) {
+    const url = message.params.request?.url || '';
+    const plan = planForUrl(url);
+    if (!plan) {
       await cdp.send('Fetch.continueRequest', { requestId: message.params.requestId }, message.sessionId);
       return;
     }
     if (message.params.responseStatusCode == null)
-      throw new Error(`${matched[1].displayName}: expected a completed script response, got an incomplete request`);
+      throw new Error(url + ': expected a completed script response, got an incomplete request');
 
     const requestKey = `${message.sessionId}:${message.params.requestId}`;
     if (pendingRequests.has(requestKey))
@@ -303,13 +344,13 @@ async function main({ executable, logPath = path.join(__dirname, 'runtime-patch.
     pendingRequests.add(requestKey);
 
     try {
-      const [patchName, patch] = matched;
-      candidateCounts.set(patchName, candidateCounts.get(patchName) + 1);
+      for (const name of plan.names)
+        candidateCounts.set(name, candidateCounts.get(name) + 1);
       const response = await cdp.send('Fetch.getResponseBody', { requestId: message.params.requestId }, message.sessionId);
       const source = response.base64Encoded
         ? Buffer.from(response.body, 'base64').toString('utf8')
         : response.body;
-      const replacement = applyPatch(source, patch);
+      const replacement = rewriteResponse(source, plan);
       const responseHeaders = (message.params.responseHeaders || []).filter(header => {
         const name = header.name.toLowerCase();
         return name !== 'content-length' && name !== 'content-encoding';
@@ -325,19 +366,22 @@ async function main({ executable, logPath = path.join(__dirname, 'runtime-patch.
       await cdp.send('Fetch.fulfillRequest', fulfill, message.sessionId);
 
       if (!replacement.changed) {
-        log(`${patch.displayName}: expected 1 structural match, got 0 in ${message.params.request.url}; waiting for another candidate`);
+        log(url + ': expected 1 structural match, got 0; waiting for another candidate');
         return;
       }
 
       const session = sessions.get(message.sessionId);
       if (!session)
         return;
-      const previousUrl = session.patchUrls.get(patchName);
-      if (previousUrl && previousUrl !== message.params.request.url)
-        throw new Error(`${patch.displayName}: expected 1 matching script, got matches in both ${previousUrl} and ${message.params.request.url}`);
-      session.patchUrls.set(patchName, message.params.request.url);
-      session.patches.add(patchName);
-      log(`${patch.displayName}: response rewritten in target ${session.targetId}`);
+      for (const name of plan.names) {
+        const slot = plan.mirror ? 'mirror:' + name : name;
+        const previousUrl = session.patchUrls.get(slot);
+        if (previousUrl && previousUrl !== url)
+          throw new Error(name + ': unexpected duplicate hook in ' + previousUrl + ' and ' + url);
+        session.patchUrls.set(slot, url);
+        if (!plan.mirror) session.patches.add(name);
+      }
+      log(url + ': ' + plan.names.join(', ') + ' rewritten in target ' + session.targetId);
       if (!primaryPatched && session.patches.size === Object.keys(PATCHES).length) {
         primaryPatched = true;
         clearTimeout(timer);
@@ -355,11 +399,13 @@ async function main({ executable, logPath = path.join(__dirname, 'runtime-patch.
     const preparation = (async () => {
       targetSessions.set(targetInfo.targetId, sessionId);
       sessions.set(sessionId, { targetId: targetInfo.targetId, patches: new Set(), patchUrls: new Map() });
-      const patterns = Object.values(PATCHES).flatMap(patch => patch.urlPatterns.map(urlPattern => ({
+      const urls = Object.values(PATCHES).flatMap(patch => patch.urlPatterns)
+        .concat(Object.keys(numberedChunks).map(id => asyncAssetRoot + id + '.*.js'));
+      const patterns = urls.map(urlPattern => ({
         urlPattern,
         resourceType: 'Script',
         requestStage: 'Response',
-      })));
+      }));
       try {
         await cdp.send('Fetch.enable', { patterns }, sessionId);
         log(`Intercepting renderer target ${targetInfo.targetId}`);
@@ -505,4 +551,6 @@ module.exports = {
   PATCHES,
   packageVersionFromExecutable,
   patchForUrl,
+  planForUrl,
+  rewriteResponse,
 };

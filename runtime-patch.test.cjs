@@ -21,7 +21,39 @@ const {
   PATCHES,
   packageVersionFromExecutable,
   patchForUrl,
+  planForUrl,
+  rewriteResponse,
 } = require('./runtime-patch.cjs');
+
+test('26.1029 patches both hooks in the primary chunk and only the composer in its lazy copy', () => {
+  const primary = planForUrl('app://-/assets/async/953502.b1de81879b.js');
+  const mirror = planForUrl('app://-/assets/async/27319.82a112c4ef.js');
+  assert.equal(primary.mirror, false);
+  assert.equal(mirror.mirror, true);
+  for (const url of ['https://example.com/953502.b1de81879b.js', 'app://-/assets/953502.b1de81879b.js',
+    'app://-/assets/async/999999.b1de81879b.js', 'app://-/assets/async/953502.b1de81879b.js.map'])
+    assert.equal(planForUrl(url), undefined);
+  const route = 'if(null!=M){if(!e.canInteract)return void(0,ty.openLocalConversationSubagentsPanel)(q,{hostId:Q,parentConversationId:M,selectedConversationId:e.conversationId,selectedDisplayName:e.displayName});(0,tx.openLocalConversationBackgroundAgent)(q,{backgroundAgent:e,hostId:Q})}';
+  const tab = 'return {props:{canInteract:n.canInteract,conversationId:n.conversationId}}';
+  const source = 'return {route(e,M){' + route + '},tab(n){' + tab + '}}';
+  const output = rewriteResponse(source, primary);
+  const calls = [];
+  const api = new Function('ty','tx','q','Q',output.source)(
+    { openLocalConversationSubagentsPanel: () => assert.fail('read-only panel opened') },
+    { openLocalConversationBackgroundAgent: (...args) => calls.push(args) }, 'tabs', 'host');
+  for (const canInteract of [true, false]) {
+    const agent = { conversationId:'child', canInteract };
+    api.route(agent, 'parent');
+    assert.deepEqual(calls.at(-1), ['tabs', {backgroundAgent:agent, hostId:'host'}]);
+    assert.deepEqual(api.tab(agent).props, {canInteract:true, conversationId:'child'});
+  }
+  api.route(null, null);
+  assert.equal(calls.length, 2);
+  assert.equal(rewriteResponse(tab, mirror).source, tab.replace('n.canInteract','!0'));
+  for (const invalid of [route, tab, source.replace('backgroundAgent:e','backgroundAgent:other')])
+    assert.throws(() => rewriteResponse(invalid, primary), /got 0/);
+  assert.throws(() => rewriteResponse(source + tab, primary), /got 2/);
+});
 
 test('changes only V2-capable catalog entries to V1', () => {
   const source = {
