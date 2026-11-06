@@ -25,13 +25,14 @@ const {
   rewriteResponse,
 } = require('./runtime-patch.cjs');
 
-test('26.1029 patches both hooks in the primary chunk and only the composer in its lazy copy', () => {
-  const primary = planForUrl('app://-/assets/async/953502.b1de81879b.js');
+for (const chunk of ['953502.b1de81879b.js', '596785.3d36633ada.js'])
+test(`${chunk} patches both hooks in the primary chunk and only the composer in its lazy copy`, () => {
+  const primary = planForUrl('app://-/assets/async/' + chunk);
   const mirror = planForUrl('app://-/assets/async/27319.82a112c4ef.js');
   assert.equal(primary.mirror, false);
   assert.equal(mirror.mirror, true);
-  for (const url of ['https://example.com/953502.b1de81879b.js', 'app://-/assets/953502.b1de81879b.js',
-    'app://-/assets/async/999999.b1de81879b.js', 'app://-/assets/async/953502.b1de81879b.js.map'])
+  for (const url of ['https://example.com/' + chunk, 'app://-/assets/' + chunk,
+    'app://-/assets/async/999999.b1de81879b.js', 'app://-/assets/async/' + chunk + '.map'])
     assert.equal(planForUrl(url), undefined);
   const route = 'if(null!=M){if(!e.canInteract)return void(0,ty.openLocalConversationSubagentsPanel)(q,{hostId:Q,parentConversationId:M,selectedConversationId:e.conversationId,selectedDisplayName:e.displayName});(0,tx.openLocalConversationBackgroundAgent)(q,{backgroundAgent:e,hostId:Q})}';
   const tab = 'return {props:{canInteract:n.canInteract,conversationId:n.conversationId}}';

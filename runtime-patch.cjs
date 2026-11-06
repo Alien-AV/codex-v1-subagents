@@ -17,6 +17,7 @@ const TESTED_CODEX_VERSIONS = Object.freeze([
   '26.928.2636.0',
   '26.1027.3384.0',
   '26.1029.7803.0',
+  '26.1103.3517.0',
 ]);
 const HOOK_BASELINE_VERSION = TESTED_CODEX_VERSIONS.at(-1);
 
@@ -178,6 +179,7 @@ function patchForUrl(url) {
 // module in a second lazy entry. Only the page establishes patch readiness.
 const asyncAssetRoot = 'app://-/assets/async/';
 const numberedChunks = {
+  '596785': ['legacyThreadRoute', 'interactiveSubagent'],
   '953502': ['legacyThreadRoute', 'interactiveSubagent'],
   '27319': ['interactiveSubagent'],
 };
