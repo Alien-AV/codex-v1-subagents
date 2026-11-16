@@ -25,7 +25,7 @@ const {
   rewriteResponse,
 } = require('./runtime-patch.cjs');
 
-for (const chunk of ['953502.b1de81879b.js', '596785.3d36633ada.js'])
+for (const chunk of ['953502.b1de81879b.js', '596785.3d36633ada.js', '625050.ae2e2342b3.js', '669098.ac02d6f910.js'])
 test(`${chunk} patches both hooks in the primary chunk and only the composer in its lazy copy`, () => {
   const primary = planForUrl('app://-/assets/async/' + chunk);
   const mirror = planForUrl('app://-/assets/async/27319.82a112c4ef.js');
